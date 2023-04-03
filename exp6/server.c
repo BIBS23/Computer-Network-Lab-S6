@@ -1,97 +1,116 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-
-#define MAX_PACKET_SIZE 1024
-#define WINDOW_SIZE 5
-
-int main(int argc, char *argv[]) {
-    int server_fd, new_socket, valread;
-    struct sockaddr_in address;
-    int opt = 1;
-    int addrlen = sizeof(address);
-    char buffer[MAX_PACKET_SIZE] = {0};
-    int expected_seq_num = 0;
-
-    // Create a TCP socket
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("socket failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Set socket options
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-        perror("setsockopt failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Set server address
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(atoi(argv[1]));
-
-    // Bind socket to the specified port
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Listen for incoming connections
-    if (listen(server_fd, 3) < 0) {
-        perror("listen failed");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Server started and listening on port %d...\n", atoi(argv[1]));
-
-    while (1) {
-        // Accept a new connection
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0) {
-            perror("accept failed");
-            exit(EXIT_FAILURE);
-        }
-
-        printf("New client connected: %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
-
-        // Receive packets from the client and send acknowledgments
-        while (1) {
-            // Receive a packet from the client
-            valread = recv(new_socket, buffer, MAX_PACKET_SIZE, 0);
-
-            if (valread == 0) {
-                // If the client has closed the connection
-                printf("Connection closed by client.\n");
-                break;
-            } else if (valread < 0) {
-                // If an error occurred while receiving data
-                perror("recv failed");
-                exit(EXIT_FAILURE);
-            }
-
-            int seq_num = buffer[0];
-
-            if (seq_num == expected_seq_num) {
-                // If the received packet has the expected sequence number
-                printf("Packet %d received and acknowledged.\n", seq_num);
-
-                // Send acknowledgment to the client
-                char ack[4] = "ACK";
-                send(new_socket, ack, strlen(ack), 0);
-
-                expected_seq_num = (expected_seq_num + 1) % WINDOW_SIZE;
-            } else {
-                // If the received packet has a different sequence number
-                printf("Packet %d received but not acknowledged. Discarding...\n", seq_num);
-            }
-        }
-
-        // Close the connection
-        close(new_socket);
-    }
-
-    return 0;
+// Server side implementation of GoBackN
+#include<stdio.h>
+#include<stdlib.h>
+#include<sys/socket.h>
+#include<sys/types.h>
+#include<sys/time.h>
+#include<netinet/in.h>
+#include<string.h>
+#include<unistd.h>
+#include<arpa/inet.h> 
+#include<fcntl.h>
+int main() 
+{
+int s_sock, c_sock;
+s_sock = socket(AF_INET, SOCK_STREAM, 0);
+struct sockaddr_in server, other;
+memset(&server, 0, sizeof(server));
+memset(&other, 0, sizeof(other));
+server.sin_family = AF_INET;
+server.sin_port = htons(9009);
+server.sin_addr.s_addr = INADDR_ANY;
+socklen_t add;
+if(bind(s_sock, (struct sockaddr*)&server, sizeof(server)) == -1) {
+printf("Binding failed\n");
+return 0;
+}
+printf("\tServer Up\n Go back n (n=3) used to send 10 messages \n\n");
+listen(s_sock, 10); 
+add = sizeof(other);
+c_sock = accept(s_sock, (struct sockaddr*)&other, &add);
+ time_t t1,t2;
+char msg[50]="server message :";
+char buff[50];
+ int flag=0;
+fd_set set1,set2,set3;
+struct timeval timeout1,timeout2,timeout3;
+int rv1,rv2,rv3;
+int i=-1;
+qq:
+i=i+1; 
+bzero(buff,sizeof(buff));
+char buff2[60];
+bzero(buff2,sizeof(buff2));
+strcpy(buff2,"server message :");
+buff2[strlen(buff2)]=i+'0';
+buff2[strlen(buff2)]='\0';
+printf("Message sent to client :%s \n",buff2);
+write(c_sock, buff2, sizeof(buff2));
+usleep(1000);
+i=i+1; 
+bzero(buff2,sizeof(buff2));
+strcpy(buff2,msg);
+buff2[strlen(msg)]=i+'0';
+printf("Message sent to client :%s \n",buff2);
+write(c_sock, buff2, sizeof(buff2));
+i=i+1; 
+usleep(1000);
+qqq:
+bzero(buff2,sizeof(buff2));
+strcpy(buff2,msg);
+buff2[strlen(msg)]=i+'0';
+printf("Message sent to client :%s \n",buff2);
+write(c_sock, buff2, sizeof(buff2));
+ FD_ZERO(&set1);
+ FD_SET(c_sock, &set1);
+ timeout1.tv_sec = 2;
+ timeout1.tv_usec = 0;
+ rv1 = select(c_sock + 1, &set1, NULL, NULL, &timeout1);
+ if(rv1 == -1)
+ perror("select error "); 
+ else if(rv1 == 0){
+ printf("Going back from %d:timeout \n",i);
+i=i-3;
+goto qq;} 
+ else{
+ read(c_sock, buff, sizeof(buff));
+printf("Message from Client: %s\n", buff);
+i++;
+if(i<=9)
+goto qqq;
+}
+qq2:
+FD_ZERO(&set2);
+ FD_SET(c_sock, &set2); 
+ timeout2.tv_sec = 3;
+ timeout2.tv_usec = 0;
+rv2 = select(c_sock + 1, &set2, NULL, NULL, &timeout2);
+ if(rv2 == -1)
+ perror("select error "); // an error accured 
+ else if(rv2 == 0){
+ printf("Going back from %d:timeout on last 2\n",i-1);
+i=i-2;
+bzero(buff2,sizeof(buff2));
+strcpy(buff2,msg);
+buff2[strlen(buff2)]=i+'0';
+write(c_sock, buff2, sizeof(buff2));
+usleep(1000);
+bzero(buff2,sizeof(buff2));
+i++;
+strcpy(buff2,msg);
+buff2[strlen(buff2)]=i+'0';
+write(c_sock, buff2, sizeof(buff2));
+ goto qq2;}
+// a timeout occured 
+ else{
+ read(c_sock, buff, sizeof(buff));
+printf("Message from Client: %s\n", buff);
+bzero(buff,sizeof(buff));
+read(c_sock, buff, sizeof(buff));
+printf("Message from Client: %s\n", buff);
+}
+//}
+close(c_sock);
+close(s_sock);
+return 0;
 }
